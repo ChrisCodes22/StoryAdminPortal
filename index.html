@@ -347,15 +347,25 @@ function getSheetUrl() { return localStorage.getItem(TRACKING_URL_KEY); }
 
 async function loadLicenses() {
     const url = getSheetUrl();
-    if (!url) return [];
+    if (!url) { console.warn('No Sheet URL configured'); return licenseCache; }
     try {
         const resp = await fetch(url + '?action=getLicenses');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const json = await resp.json();
-        if (json.status === 'ok') {
-            licenseCache = json.licenses || [];
+        if (json && json.status === 'ok' && Array.isArray(json.licenses)) {
+            licenseCache = json.licenses.map(r => ({
+                id: r.id,
+                name: String(r.name || '').trim(),
+                key: String(r.key || '').trim(),
+                email: String(r.email || '').trim(),
+                created: String(r.created || '').trim(),
+                expires: String(r.expires || '').trim(),
+                days: Number(r.days || 365),
+                notes: String(r.notes || '').trim()
+            }));
             return licenseCache;
         }
-    } catch(e) { console.warn('License load failed:', e); }
+    } catch(e) { console.warn('License load failed:', e); toast('⚠️ Could not load licenses: ' + e.message); }
     return licenseCache;
 }
 
@@ -574,7 +584,7 @@ async function refreshUsageData() {
 function renderUsageStats(json) {
     const data = json.data || [], now = new Date(), todayStr = now.toISOString().split('T')[0], weekAgo = new Date(now - 7 * 86400000);
     let todayCount = 0, weekCount = 0; const userSet = new Set();
-    data.forEach(r => { userSet.add(r.userId); if (r.timestamp && r.timestamp.startsWith(todayStr)) todayCount++; if (new Date(r.timestamp) >= weekAgo) weekCount++; });
+    data.forEach(r => { userSet.add(r.techName || r.userId); if (r.timestamp && r.timestamp.startsWith(todayStr)) todayCount++; if (new Date(r.timestamp) >= weekAgo) weekCount++; });
     document.getElementById('stat-total-uses').textContent = data.length;
     document.getElementById('stat-active-users').textContent = userSet.size;
     document.getElementById('stat-today-uses').textContent = todayCount;
@@ -583,10 +593,14 @@ function renderUsageStats(json) {
 function renderUsagePerUser(summary) {
     const container = document.getElementById('usage-per-user');
     if (!summary || !Object.keys(summary).length) { container.innerHTML = '<div class="empty-state">No usage data yet.</div>'; return; }
-    const users = Object.entries(summary).sort((a, b) => b[1].count - a[1].count), maxCount = users[0][1].count;
+    const users = Object.entries(summary)
+        .filter(e => e[0] && e[0] !== 'unknown')
+        .sort((a, b) => b[1].count - a[1].count);
+    if (!users.length) { container.innerHTML = '<div class="empty-state">No valid usage data yet.</div>'; return; }
+    const maxCount = users[0][1].count || 1;
     container.innerHTML = users.map(([uid, info]) => {
         const pct = Math.round((info.count / maxCount) * 100);
-        return '<div class="usage-row"><div class="usage-name">' + uid + '</div><div class="usage-bar-wrap"><div class="usage-bar-bg"><div class="usage-bar-fill" style="width:' + pct + '%"></div></div></div><div class="usage-count">' + info.count + '</div></div>';
+        return '<div class="usage-row"><div class="usage-name">' + (uid || 'Unknown') + '</div><div class="usage-bar-wrap"><div class="usage-bar-bg"><div class="usage-bar-fill" style="width:' + pct + '%"></div></div></div><div class="usage-count">' + (info.count || 0) + '</div></div>';
     }).join('');
 }
 function renderTopTemplates(data) {
@@ -605,13 +619,16 @@ function renderActivityLog(data) {
     if (!recent.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No activity yet.</td></tr>'; return; }
     tbody.innerHTML = recent.map(r => {
         const ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : '—';
-        return '<tr><td>' + ts + '</td><td><strong>' + (r.userId||'—') + '</strong></td><td>' + (r.template||'—') + '</td><td class="mono" style="font-size:11px;">' + ((r.licenseKey||'—').substring(0,16)) + '…</td></tr>';
+        const user = r.techName || r.userId || '—';
+        const tmpl = (r.template || '').substring(0, 50) || '—';
+        const key = ((r.licenseKey||'—').substring(0,16)) + (r.licenseKey && r.licenseKey.length > 16 ? '…' : '');
+        return '<tr><td>' + ts + '</td><td><strong>' + user + '</strong></td><td>' + tmpl + '</td><td class="mono" style="font-size:11px;">' + key + '</td></tr>';
     }).join('');
 }
 function exportUsageCSV() {
     if (!usageData || !usageData.data.length) { toast('No usage data to export.'); return; }
     const header = 'Timestamp,User,Template,License Key';
-    const rows = usageData.data.map(r => '"' + r.timestamp + '","' + r.userId + '","' + r.template + '","' + r.licenseKey + '"');
+    const rows = usageData.data.map(r => '"' + r.timestamp + '","' + (r.techName || r.userId) + '","' + (r.template || 'unknown') + '","' + (r.licenseKey || 'none') + '"');
     const csv = [header, ...rows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' }), url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'bsl-usage-' + new Date().toISOString().split('T')[0] + '.csv'; a.click();
@@ -624,7 +641,7 @@ setInterval(tick, 1000); tick();
 // ========== AUTH ==========
 const PASSWORDS = {
     admin:  'Ilovemywife122$',
-    viewer: 'Da1Upper1983'
+    viewer: 'Da1upper1983'
 };
 
 let currentRole = null;
