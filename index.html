@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -371,13 +371,13 @@ async function loadLicenses() {
 
 async function saveLicense(rec) {
     const url = getSheetUrl();
-    // Always update local cache immediately
     const idx = licenseCache.findIndex(r => r.id === rec.id);
     if (idx >= 0) licenseCache[idx] = rec; else licenseCache.push(rec);
     if (!url) return;
     try {
-        await fetch(url, { method: 'POST', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ action: 'saveLicense', ...rec }), redirect: 'follow' });
+        await fetch(url, { method: 'POST', mode: 'no-cors',
+            headers: {'Content-Type':'text/plain'},
+            body: JSON.stringify({ action: 'saveLicense', ...rec }) });
     } catch(e) { console.warn('License save failed:', e); }
 }
 
@@ -386,8 +386,9 @@ async function saveBulkLicenses(licenses) {
     licenses.forEach(rec => licenseCache.push(rec));
     if (!url || !licenses.length) return;
     try {
-        await fetch(url, { method: 'POST', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ action: 'saveBulkLicenses', licenses }), redirect: 'follow' });
+        await fetch(url, { method: 'POST', mode: 'no-cors',
+            headers: {'Content-Type':'text/plain'},
+            body: JSON.stringify({ action: 'saveBulkLicenses', licenses }) });
     } catch(e) { console.warn('Bulk save failed:', e); }
 }
 
@@ -396,8 +397,9 @@ async function revokeFromSheet(id) {
     licenseCache = licenseCache.filter(r => r.id !== id);
     if (!url) return;
     try {
-        await fetch(url, { method: 'POST', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ action: 'revokeLicense', id }), redirect: 'follow' });
+        await fetch(url, { method: 'POST', mode: 'no-cors',
+            headers: {'Content-Type':'text/plain'},
+            body: JSON.stringify({ action: 'revokeLicense', id }) });
     } catch(e) { console.warn('Revoke failed:', e); }
 }
 
@@ -407,8 +409,9 @@ async function extendInSheet(id, newExpires) {
     if (rec) rec.expires = newExpires;
     if (!url) return;
     try {
-        await fetch(url, { method: 'POST', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ action: 'extendLicense', id, expires: newExpires }), redirect: 'follow' });
+        await fetch(url, { method: 'POST', mode: 'no-cors',
+            headers: {'Content-Type':'text/plain'},
+            body: JSON.stringify({ action: 'extendLicense', id, expires: newExpires }) });
     } catch(e) { console.warn('Extend failed:', e); }
 }
 
@@ -651,8 +654,8 @@ setInterval(tick, 1000); tick();
 
 // ========== AUTH ==========
 const PASSWORDS = {
-    admin:  'Ilovemywife122$',
-    viewer: 'Da1upper1983'
+    admin:  'ADMIN_PASSWORD_HERE',
+    viewer: 'VIEWER_PASSWORD_HERE'
 };
 
 let currentRole = null;
